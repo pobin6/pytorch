@@ -72,14 +72,16 @@ at::Tensor quantized_convolution_pt2(
       Attr(/*q_scale=*/1.0 / inv_output_scale, /*zp=*/output_zero_point);
 
   construct_attr_by_post_op(
-      binary_attr.has_value() ? binary_attr.value() : "none",
-      binary_alpha.has_value() ? binary_alpha.value().to<double>() : 1.0,
-      accum_scale,
-      accum_zero_point,
-      unary_attr.has_value() ? unary_attr.value() : "none",
-      unary_scalars,
-      unary_algorithm.has_value() ? unary_algorithm.value() : "",
-      attr);
+    binary_attr.has_value() ? binary_attr.value() : "none",
+    binary_alpha.has_value() ? binary_alpha.value().to<double>() : 1.0,
+    accum_scale,
+    accum_zero_point,
+    accum,
+    unary_attr.has_value() ? unary_attr.value() : "none",
+    unary_scalars,
+    unary_algorithm.has_value() ? unary_algorithm.value() : "",
+    attr
+  );
 
   auto ndim = act.ndimension();
   if (bias.has_value()) {
