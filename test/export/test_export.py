@@ -2816,6 +2816,7 @@ def forward(self, p_linear_weight, p_linear_bias, b_buffer, x):
         export(N(), inputs, dynamic_shapes=dynamic_shapes)
 
     @testing.expectedFailureSerDer  # no unbacked bindings after deserialization?
+    @testing.expectedFailureCppSerDes  # no unbacked bindings after deserialization?
     @testing.expectedFailureSerDerNonStrict
     def test_unbacked_bindings_for_divisible_u_symint(self):
         with torch.library._scoped_library("mylib", "FRAGMENT") as lib:
@@ -3538,6 +3539,7 @@ def forward(self, p_linear_weight, p_linear_bias, b_buffer, x):
         self._test_export_same_as_eager(kw_func, args, kwargs)
 
     @testing.expectedFailureSerDer  # we don't save placeholder metadata
+    @testing.expectedFailureCppSerDes  # we don't save placeholder metadata
     @testing.expectedFailureSerDerNonStrict
     @testing.expectedFailureNonStrict
     @testing.expectedFailureTrainingIRToRunDecompNonStrict  # source_fn_stack failure
@@ -7809,6 +7811,7 @@ def forward(self, x, y):
         export(f, (inputs,), dynamic_shapes=dynamic_shapes)
 
     @testing.expectedFailureRetraceabilityNonStrict
+    @testing.expectedFailureCppSerDes  # dynamic shape serialization
     def test_disable_forced_specializations_ok(self):
         # check that we don't force specialization, and defer to runtime asserts
         # with allow_complex_guards_as_runtime_asserts=True to successfully export
@@ -7929,6 +7932,7 @@ def forward(self, x, y):
 
     # TODO requires_grad doesn't seem to work with serialization.
     @testing.expectedFailureSerDer
+    @testing.expectedFailureCppSerDes
     @testing.expectedFailureSerDerNonStrict
     def test_preserve_requires_grad_placeholders(self):
         class Module(torch.nn.Module):
@@ -8267,6 +8271,7 @@ def forward(self, x, y):
             ep.graph_module.code
         )
 
+    @testing.expectedFailureCppSerDes
     def test_slice_with_floordiv(self):
         # slice operation emits runtime assert s0//2 <= s1
         class M1(torch.nn.Module):
@@ -8836,6 +8841,7 @@ def forward(self, x):
             _load_dynamic_shapes(spec, from_dict=True)
 
     @testing.expectedFailureSerDer  # TODO(pianpwk): PowByNatural valuerange deserialization
+    @testing.expectedFailureCppSerDes  # TODO(pianpwk): PowByNatural valuerange deserialization
     @testing.expectedFailureSerDerNonStrict
     @testing.expectedFailureRetraceabilityNonStrict
     def test_dim_dynamic(self):
