@@ -6,8 +6,9 @@ from typing import Any, Dict, List, Optional, Tuple, TYPE_CHECKING, Union
 
 import torch
 from torch._dynamo.external_utils import (
-    call_backward,
+    call_backward_impl,
     call_hook,
+    FakeBackwardCFunction,
     FakeCompiledAutogradEngine,
 )
 from torch._dynamo.source import GetItemSource, LocalSource
@@ -151,21 +152,72 @@ class AutogradCompilerInstance:
         inputs,
         output_metadatas,
         saved_tensors,
-        backward_idx: int,
+        bwd_idx: int,
     ):
         assert self.hooks_proxy is not None
-        backward_c_function = self.hooks_proxy[backward_idx]  # type: ignore[index]
-        proxies = self.fx_tracer.create_proxy(
+        pctx = self.hooks_proxy[bwd_idx]  # type: ignore[index]
+        psaved_tensors = self.to_proxy(saved_tensors)
+
+        def create_fake_ctx(
+            ctx: torch.autograd.function.BackwardCFunction,
+            saved_tensors: List[torch.Tensor],
+        ) -> FakeBackwardCFunction:
+            return FakeBackwardCFunction(ctx, saved_tensors)
+
+        def call_backward_prologue(
+            fakectx: FakeBackwardCFunction,
+            *args: Any,
+        ) -> Union[torch.Tensor, tuple[torch.Tensor, ...]]:
+            return fakectx._forward_cls._backward_prologue(fakectx, *args)  # type: ignore[attr-defined]
+
+        def call_backward_epilogue(
+            fakectx: FakeBackwardCFunction,
+            *args: Any,
+        ) -> Union[torch.Tensor, tuple[torch.Tensor, ...]]:
+            return fakectx._forward_cls._backward_epilogue(fakectx, *args)  # type: ignore[attr-defined]
+
+        torch._dynamo.allow_in_graph(create_fake_ctx)
+        torch._dynamo.allow_in_graph(call_backward_prologue)
+        torch._dynamo.allow_in_graph(call_backward_epilogue)
+
+        pfakectx = self.fx_tracer.create_proxy(
             kind="call_function",
-            target=call_backward,
+            target=create_fake_ctx,
             args=(
-                backward_c_function,
-                self.to_proxy(saved_tensors),
-                *self.to_proxy(inputs),
+                pctx,
+                psaved_tensors,
             ),
             kwargs={},
         )
 
+        psaved_tensors = self.to_proxy(saved_tensors)
+        pall_args = self.fx_tracer.create_proxy(
+            kind="call_function",
+            target=call_backward_prologue,
+            args=(
+                pfakectx,
+                *self.to_proxy(inputs),
+            ),
+            kwargs={},
+        )
+        pout = self.fx_tracer.create_proxy(
+            kind="call_function",
+            target=call_backward_impl,
+            args=(
+                pfakectx,
+                pall_args,
+            ),
+            kwargs={},
+        )
+        proxies = self.fx_tracer.create_proxy(
+            kind="call_function",
+            target=call_backward_epilogue,
+            args=(
+                pfakectx,
+                pout,
+            ),
+            kwargs={},
+        )
         with disable_proxy_modes_tracing():
             # create fake Tensors
             grad_ins: List[Optional[torch.Tensor]] = []
