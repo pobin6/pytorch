@@ -543,7 +543,7 @@ class BenchmarkRequest:
         if debug:
             load_elapse = time.time() - start_ts  # type: ignore[possibly-undefined]
             start_ts = time.time()
-
+        fn.func.__self__.bandwidth_info = False
         out = self.do_bench(fn, *input_tensors, output_tensor)
 
         if debug:
@@ -595,11 +595,9 @@ class GPUDeviceBenchmarkMixin:
             device_idx = next(iter(device_idx_set))
         else:
             device_idx = torch.cuda.current_device()
-
         with torch.cuda.device(device_idx):
             out = benchmarker.benchmark_gpu(fn)
             torch.cuda.synchronize()  # shake out any CUDA errors
-
         return out
 
 
@@ -698,6 +696,16 @@ class TritonBenchmarkRequest(BenchmarkRequest):
                 )
 
             return run_with_workspace
+        if isinstance(getattr(mod, self.kernel_name), torch._inductor.runtime.triton_heuristics.DebugAutotuner):
+            return functools.partial(
+                run_method,
+                *input_tensors,
+                output_tensor,
+                *extra_args,
+                grid=self.grid,
+                **warmup_arg,
+                stream=stream,
+            )
         else:
             return functools.partial(
                 run_method,
