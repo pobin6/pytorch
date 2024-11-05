@@ -239,6 +239,11 @@ def bmm(
             out = (self.unsqueeze(-1) * batch2.unsqueeze(1)).sum(dim=2)
             return out
     if self.device.type == "cpu":
+        if guard_size_oblivious(self.size(0) == 1) and guard_size_oblivious(
+            batch2.size(0) == 1
+        ):
+            counters["inductor"]["decompose_bmm"] += 1
+            return torch.matmul(self.squeeze(0), batch2.squeeze(0)).unsqueeze(0)
         if guard_size_oblivious(self.size(1) == 1) and guard_size_oblivious(
             batch2.size(-1) == 1
         ):
@@ -269,7 +274,7 @@ def addmm(
             return alpha * out + beta * self
         if (
             guard_size_oblivious(mat1.size(0) == 1)
-            and definitely_true(mat2.size(0) <= 16)
+            and definitely_true(mat2.size(0) <= 64)
             and definitely_true(mat2.size(1) <= 16)
         ):
             counters["inductor"]["decompose_addmm"] += 1
@@ -308,6 +313,16 @@ def mm(
             return torch.sum(
                 self.squeeze(0) * input2.squeeze(-1), dim=0, keepdim=True
             ).unsqueeze(0)
+        if guard_size_oblivious(self.size(0) <= 16) and guard_size_oblivious(
+            input2.size(-1) == 1
+        ):
+            counters["inductor"]["decompose_mm"] += 1
+            return torch.sum(self * input2.t(), dim=1, keepdim=True)
+        if guard_size_oblivious(self.size(0) <= 16) and guard_size_oblivious(
+            input2.size(-1) == 2
+        ):
+            counters["inductor"]["decompose_mm"] += 1
+            return torch.sum(self.unsqueeze(2) * input2.unsqueeze(0), dim=1)
     return NotImplemented
 
 
