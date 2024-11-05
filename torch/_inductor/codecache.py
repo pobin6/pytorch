@@ -1208,6 +1208,7 @@ class FxGraphCache:
     ) -> CompiledFxGraph:
         """
         Run a set of post processing steps after loading from the cache. These involve:
+         - End TritonBundle
          - Setting the tracing context output strides
          - Running cudagraphs if enabled
          - Realigning inputs
@@ -1216,6 +1217,10 @@ class FxGraphCache:
         The results of this function are *not* saved in the cache itself.
         """
         set_tracing_context_output_strides(example_inputs, compiled_graph)
+
+        # If we have not ended compile using TritonBundler.collect, lets
+        # end here.
+        TritonBundler.end_compile()
 
         if cudagraphs:
             # It's possible that cudagraphs is enabled, but was disabled
